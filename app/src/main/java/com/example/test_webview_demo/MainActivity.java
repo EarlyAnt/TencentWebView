@@ -41,7 +41,6 @@ public class MainActivity extends Activity {
     private static final String mUrl = "https://va-demo.chinaeast2.cloudapp.chinacloudapi.cn/?avatar=gululu&chatType=voice&bot=c18902dc-7fb8-4c31-9aa4-47f1b616af9e";
     private static final String TAG = "SdkDemo";
     private static final int MAX_LENGTH = 14;
-    private ProgressBar mPageLoadingProgressBar = null;
     private ValueCallback<Uri> uploadFile;
     private URL mIntentUrl;
 
@@ -81,24 +80,12 @@ public class MainActivity extends Activity {
         openWebPage();
     }
 
-    private void initProgressBar() {
-        mPageLoadingProgressBar = (ProgressBar) findViewById(R.id.progressBar);// new
-        // ProgressBar(getApplicationContext(),
-        // null,
-        // android.R.attr.progressBarStyleHorizontal);
-        mPageLoadingProgressBar.setMax(100);
-        mPageLoadingProgressBar.setProgressDrawable(this.getResources()
-                .getDrawable(R.drawable.color_progressbar));
-    }
-
     private void init() {
         mWebView = new X5WebView(this, null);
 
         mViewParent.addView(mWebView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.FILL_PARENT,
                 FrameLayout.LayoutParams.FILL_PARENT));
-
-        initProgressBar();
 
         mWebView.setWebViewClient(new WebViewClient() {
             @Override
