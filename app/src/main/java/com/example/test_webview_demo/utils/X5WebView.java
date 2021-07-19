@@ -38,31 +38,31 @@ public class X5WebView extends WebView {
 	}
 
 	private void initWebViewSettings() {
-		WebSettings webSetting = this.getSettings();
-		webSetting.setJavaScriptEnabled(true);
-		webSetting.setJavaScriptCanOpenWindowsAutomatically(true);
-		webSetting.setAllowFileAccess(true);
-		webSetting.setLayoutAlgorithm(LayoutAlgorithm.NARROW_COLUMNS);
-		webSetting.setSupportZoom(true);
-		webSetting.setBuiltInZoomControls(true);
-		webSetting.setUseWideViewPort(true);
-		webSetting.setSupportMultipleWindows(true);
-		// webSetting.setLoadWithOverviewMode(true);
-		webSetting.setAppCacheEnabled(true);
-		// webSetting.setDatabaseEnabled(true);
-		webSetting.setDomStorageEnabled(true);
-		webSetting.setGeolocationEnabled(true);
-		webSetting.setAppCacheMaxSize(Long.MAX_VALUE);
-		// webSetting.setPageCacheCapacity(IX5WebSettings.DEFAULT_CACHE_CAPACITY);
-		webSetting.setPluginState(WebSettings.PluginState.ON_DEMAND);
-		// webSetting.setRenderPriority(WebSettings.RenderPriority.HIGH);
-		webSetting.setCacheMode(WebSettings.LOAD_NO_CACHE);
+		WebSettings webSettings = this.getSettings();
+		webSettings.setJavaScriptEnabled(true);
+		webSettings.setJavaScriptCanOpenWindowsAutomatically(true);
+		webSettings.setAllowFileAccess(true);
+		webSettings.setLayoutAlgorithm(LayoutAlgorithm.NARROW_COLUMNS);
+		webSettings.setSupportZoom(true);
+		webSettings.setBuiltInZoomControls(true);
+		webSettings.setUseWideViewPort(true);
+		webSettings.setSupportMultipleWindows(true);
+		// webSettings.setLoadWithOverviewMode(true);
+		webSettings.setAppCacheEnabled(true);
+		// webSettings.setDatabaseEnabled(true);
+		webSettings.setDomStorageEnabled(true);
+		webSettings.setGeolocationEnabled(true);
+		webSettings.setAppCacheMaxSize(Long.MAX_VALUE);
+		// webSettings.setPageCacheCapacity(IX5WebSettings.DEFAULT_CACHE_CAPACITY);
+		webSettings.setPluginState(WebSettings.PluginState.ON_DEMAND);
+		// webSettings.setRenderPriority(WebSettings.RenderPriority.HIGH);
+		webSettings.setCacheMode(WebSettings.LOAD_NO_CACHE);
 
 		// this.getSettingsExtension().setPageCacheCapacity(IX5WebSettings.DEFAULT_CACHE_CAPACITY);//extension
 		// settings 的设计
 	}
 
-	@Override
+	/*@Override
 	protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
 		boolean ret = super.drawChild(canvas, child, drawingTime);
 		canvas.save();
@@ -85,11 +85,5 @@ public class X5WebView extends WebView {
 		canvas.drawText(Build.MODEL, 10, 200, paint);
 		canvas.restore();
 		return ret;
-	}
-
-	public X5WebView(Context arg0) {
-		super(arg0);
-		setBackgroundColor(85621);
-	}
-
+	}*/
 }
