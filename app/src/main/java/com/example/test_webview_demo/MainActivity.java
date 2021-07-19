@@ -1,172 +1,572 @@
 package com.example.test_webview_demo;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.graphics.PixelFormat;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
 import android.os.Process;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.KeyEvent;
-import android.view.Menu;
 import android.view.View;
-import android.widget.AdapterView;
-import android.widget.AdapterView.OnItemClickListener;
-import android.widget.GridView;
-import android.widget.SimpleAdapter;
+import android.view.View.OnClickListener;
+import android.view.View.OnFocusChangeListener;
+import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.ProgressBar;
+import android.widget.Toast;
+
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
+import com.example.test_webview_demo.utils.X5WebView;
+import com.tencent.smtt.export.external.interfaces.ConsoleMessage;
+import com.tencent.smtt.export.external.interfaces.IX5WebChromeClient.CustomViewCallback;
+import com.tencent.smtt.export.external.interfaces.JsResult;
+import com.tencent.smtt.sdk.CookieSyncManager;
+import com.tencent.smtt.sdk.DownloadListener;
+import com.tencent.smtt.sdk.ValueCallback;
+import com.tencent.smtt.sdk.WebChromeClient;
+import com.tencent.smtt.sdk.WebSettings;
+import com.tencent.smtt.sdk.WebSettings.LayoutAlgorithm;
+import com.tencent.smtt.sdk.WebView;
+import com.tencent.smtt.sdk.WebViewClient;
+import com.tencent.smtt.utils.TbsLog;
+
+import java.net.MalformedURLException;
+import java.net.URL;
 
 public class MainActivity extends Activity {
+    private static int CODE_FOR_WRITE_PERMISSION = 1;
+    /**
+     * 作为一个浏览器的示例展示出来，采用android+web的模式
+     */
+    private X5WebView mWebView;
+    private ViewGroup mViewParent;
+    private ImageButton mBack;
+    private ImageButton mForward;
+    private ImageButton mExit;
+    private ImageButton mHome;
+    private ImageButton mMore;
+    private Button mGo;
+    private EditText mUrl;
 
-    public static boolean firstOpening = true;
-    private static String[] titles = null;
+    private static final String mHomeUrl = "http://app.html5.qq.com/navi/index";
+    private static final String TAG = "SdkDemo";
+    private static final int MAX_LENGTH = 14;
+    private boolean mNeedTestPage = false;
 
-    public static final int MSG_WEBVIEW_CONSTRUCTOR = 1;
-    public static final int MSG_WEBVIEW_POLLING = 2;
+    private final int disable = 120;
+    private final int enable = 255;
 
-    // /////////////////////////////////////////////////////////////////////////////////////////////////
-    // add constant here
-    private static final int TBS_WEB = 0;
-    private static final int FULL_SCREEN_VIDEO = 1;
-    private static final int FILE_CHOOSER = 2;
+    private ProgressBar mPageLoadingProgressBar = null;
 
-    // /////////////////////////////////////////////////////////////////////////////////////////////
-    // for view init
-    private Context mContext = null;
-    private SimpleAdapter gridAdapter;
-    private GridView gridView;
-    private ArrayList<HashMap<String, Object>> items;
+    private ValueCallback<Uri> uploadFile;
 
-    private static boolean main_initialized = false;
+    private URL mIntentUrl;
 
-    // ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Activity OnCreate
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main_advanced);
-        mContext = this;
-        if (!main_initialized) {
-            this.new_init();
+        getWindow().setFormat(PixelFormat.TRANSLUCENT);
+
+        requestPermissions();
+
+        Intent intent = getIntent();
+        if (intent != null) {
+            try {
+                mIntentUrl = new URL(intent.getData().toString());
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+            } catch (NullPointerException e) {
+
+            } catch (Exception e) {
+            }
         }
-        gotoBrowser();
+        //
+        try {
+            if (Integer.parseInt(android.os.Build.VERSION.SDK) >= 11) {
+                getWindow()
+                        .setFlags(
+                                android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+                                android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
+            }
+        } catch (Exception e) {
+        }
+
+        /*
+         * getWindow().addFlags(
+         * android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN);
+         */
+        setContentView(R.layout.activity_main);
+        mViewParent = (ViewGroup) findViewById(R.id.webView1);
+
+        initBtnListenser();
+
+        mTestHandler.sendEmptyMessageDelayed(MSG_INIT_UI, 10);
     }
 
-    // ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Activity OnResume
-    @Override
-    protected void onResume() {
-        this.new_init();
-
-        // this.gridView.setAdapter(gridAdapter);
-        super.onResume();
+    private void changGoForwardButton(WebView view) {
+        if (view.canGoBack())
+            mBack.setAlpha(enable);
+        else
+            mBack.setAlpha(disable);
+        if (view.canGoForward())
+            mForward.setAlpha(enable);
+        else
+            mForward.setAlpha(disable);
+        if (view.getUrl() != null && view.getUrl().equalsIgnoreCase(mHomeUrl)) {
+            mHome.setAlpha(disable);
+            mHome.setEnabled(false);
+        } else {
+            mHome.setAlpha(enable);
+            mHome.setEnabled(true);
+        }
     }
 
-    // ////////////////////////////////////////////////////////////////////////////////
-    // initiate new UI content
-    private void new_init() {
-        items = new ArrayList<HashMap<String, Object>>();
-        this.gridView = (GridView) this.findViewById(R.id.item_grid);
+    private void initProgressBar() {
+        mPageLoadingProgressBar = (ProgressBar) findViewById(R.id.progressBar1);// new
+        // ProgressBar(getApplicationContext(),
+        // null,
+        // android.R.attr.progressBarStyleHorizontal);
+        mPageLoadingProgressBar.setMax(100);
+        mPageLoadingProgressBar.setProgressDrawable(this.getResources()
+                .getDrawable(R.drawable.color_progressbar));
+    }
 
-        if (gridView == null)
-            throw new IllegalArgumentException("the gridView is null");
+    private void init() {
 
-        titles = getResources().getStringArray(R.array.index_titles);
-        int[] iconResourse = {R.drawable.tbsweb, R.drawable.fullscreen,
-                R.drawable.filechooser};
+        mWebView = new X5WebView(this, null);
 
-        HashMap<String, Object> item = null;
-        // HashMap<String, ImageView> block = null;
-        for (int i = 0; i < titles.length; i++) {
-            item = new HashMap<String, Object>();
-            item.put("title", titles[i]);
-            item.put("icon", iconResourse[i]);
+        mViewParent.addView(mWebView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.FILL_PARENT,
+                FrameLayout.LayoutParams.FILL_PARENT));
 
-            items.add(item);
-        }
-        this.gridAdapter = new SimpleAdapter(this, items,
-                R.layout.function_block, new String[]{"title", "icon"},
-                new int[]{R.id.Item_text, R.id.Item_bt});
-        if (null != this.gridView) {
-            this.gridView.setAdapter(gridAdapter);
-            this.gridAdapter.notifyDataSetChanged();
-            this.gridView.setOnItemClickListener(new OnItemClickListener() {
+        initProgressBar();
 
-                @Override
-                public void onItemClick(AdapterView<?> gridView, View view,
-                                        int position, long id) {
-                    Intent intent = null;
-                    switch (position) {
-                        case FILE_CHOOSER: {
-                            intent = new Intent(MainActivity.this,
-                                    FilechooserActivity.class);
-                            MainActivity.this.startActivity(intent);
+        mWebView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return false;
+            }
 
-                        }
-                        break;
-                        case FULL_SCREEN_VIDEO: {
-                            intent = new Intent(MainActivity.this,
-                                    FullScreenActivity.class);
-                            MainActivity.this.startActivity(intent);
-                        }
-                        break;
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                // mTestHandler.sendEmptyMessage(MSG_OPEN_TEST_URL);
+                mTestHandler.sendEmptyMessageDelayed(MSG_OPEN_TEST_URL, 5000);// 5s?
+                if (Integer.parseInt(android.os.Build.VERSION.SDK) >= 16)
+                    changGoForwardButton(view);
+                /* mWebView.showLog("test Log"); */
+            }
+        });
 
-                        case TBS_WEB: {
-                            intent = new Intent(MainActivity.this,
-                                    BrowserActivity.class);
-                            MainActivity.this.startActivity(intent);
+        mWebView.setWebChromeClient(new WebChromeClient() {
 
-                        }
-                        break;
+            @Override
+            public boolean onJsConfirm(WebView arg0, String arg1, String arg2,
+                                       JsResult arg3) {
+                return super.onJsConfirm(arg0, arg1, arg2, arg3);
+            }
 
-                    }
+            View myVideoView;
+            View myNormalView;
+            CustomViewCallback callback;
 
+            // /////////////////////////////////////////////////////////
+            //
+
+            /**
+             * 全屏播放配置
+             */
+            @Override
+            public void onShowCustomView(View view,
+                                         CustomViewCallback customViewCallback) {
+                FrameLayout normalView = (FrameLayout) findViewById(R.id.web_filechooser);
+                ViewGroup viewGroup = (ViewGroup) normalView.getParent();
+                viewGroup.removeView(normalView);
+                viewGroup.addView(view);
+                myVideoView = view;
+                myNormalView = normalView;
+                callback = customViewCallback;
+            }
+
+            @Override
+            public void onHideCustomView() {
+                if (callback != null) {
+                    callback.onCustomViewHidden();
+                    callback = null;
                 }
-            });
+                if (myVideoView != null) {
+                    ViewGroup viewGroup = (ViewGroup) myVideoView.getParent();
+                    viewGroup.removeView(myVideoView);
+                    viewGroup.addView(myNormalView);
+                }
+            }
 
+            @Override
+            public boolean onJsAlert(WebView arg0, String arg1, String arg2,
+                                     JsResult arg3) {
+                /**
+                 * 这里写入你自定义的window alert
+                 */
+                return super.onJsAlert(null, arg1, arg2, arg3);
+            }
+
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage var1) {
+                System.out.println(String.format("<><BrowserActivity.onConsoleMessage>console message: %s", var1.message()));
+                return super.onConsoleMessage(var1);
+            }
+        });
+
+        mWebView.setDownloadListener(new DownloadListener() {
+
+            @Override
+            public void onDownloadStart(String arg0, String arg1, String arg2,
+                                        String arg3, long arg4) {
+                TbsLog.d(TAG, "url: " + arg0);
+                new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("allow to download？")
+                        .setPositiveButton("yes",
+                                new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog,
+                                                        int which) {
+                                        Toast.makeText(
+                                                MainActivity.this,
+                                                "fake message: i'll download...",
+                                                Toast.LENGTH_SHORT).show();
+                                    }
+                                })
+                        .setNegativeButton("no",
+                                new DialogInterface.OnClickListener() {
+
+                                    @Override
+                                    public void onClick(DialogInterface dialog,
+                                                        int which) {
+                                        // TODO Auto-generated method stub
+                                        Toast.makeText(
+                                                MainActivity.this,
+                                                "fake message: refuse download...",
+                                                Toast.LENGTH_SHORT).show();
+                                    }
+                                })
+                        .setOnCancelListener(
+                                new DialogInterface.OnCancelListener() {
+
+                                    @Override
+                                    public void onCancel(DialogInterface dialog) {
+                                        // TODO Auto-generated method stub
+                                        Toast.makeText(
+                                                MainActivity.this,
+                                                "fake message: refuse download...",
+                                                Toast.LENGTH_SHORT).show();
+                                    }
+                                }).show();
+            }
+        });
+
+        WebSettings webSetting = mWebView.getSettings();
+        webSetting.setAllowFileAccess(true);
+        webSetting.setLayoutAlgorithm(LayoutAlgorithm.NARROW_COLUMNS);
+        webSetting.setSupportZoom(true);
+        webSetting.setBuiltInZoomControls(true);
+        webSetting.setUseWideViewPort(true);
+        webSetting.setSupportMultipleWindows(false);
+        // webSetting.setLoadWithOverviewMode(true);
+        webSetting.setAppCacheEnabled(true);
+        // webSetting.setDatabaseEnabled(true);
+        webSetting.setDomStorageEnabled(true);
+        webSetting.setJavaScriptEnabled(true);
+        webSetting.setGeolocationEnabled(true);
+        webSetting.setAppCacheMaxSize(Long.MAX_VALUE);
+        webSetting.setAppCachePath(this.getDir("appcache", 0).getPath());
+        webSetting.setDatabasePath(this.getDir("databases", 0).getPath());
+        webSetting.setGeolocationDatabasePath(this.getDir("geolocation", 0)
+                .getPath());
+        // webSetting.setPageCacheCapacity(IX5WebSettings.DEFAULT_CACHE_CAPACITY);
+        webSetting.setPluginState(WebSettings.PluginState.ON_DEMAND);
+        // webSetting.setRenderPriority(WebSettings.RenderPriority.HIGH);
+        // webSetting.setPreFectch(true);
+        webSetting.setMediaPlaybackRequiresUserGesture(false);
+
+        long time = System.currentTimeMillis();
+        if (mIntentUrl == null) {
+            mWebView.loadUrl(mHomeUrl);
+        } else {
+            mWebView.loadUrl(mIntentUrl.toString());
         }
-        main_initialized = true;
-
+        TbsLog.d("time-cost", "cost time: "
+                + (System.currentTimeMillis() - time));
+        CookieSyncManager.createInstance(this);
+        CookieSyncManager.getInstance().sync();
     }
 
-    // ///////////////////////////////////////////////////////////////////////////////////////////
-    // Activity menu
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        return true;
+    private void initBtnListenser() {
+        mBack = (ImageButton) findViewById(R.id.btnBack1);
+        mForward = (ImageButton) findViewById(R.id.btnForward1);
+        mExit = (ImageButton) findViewById(R.id.btnExit1);
+        mHome = (ImageButton) findViewById(R.id.btnHome1);
+        mGo = (Button) findViewById(R.id.btnGo1);
+        mUrl = (EditText) findViewById(R.id.editUrl1);
+        mMore = (ImageButton) findViewById(R.id.btnMore);
+        if (Integer.parseInt(android.os.Build.VERSION.SDK) >= 16) {
+            mBack.setAlpha(disable);
+            mForward.setAlpha(disable);
+            mHome.setAlpha(disable);
+        }
+        mHome.setEnabled(false);
+
+        mBack.setOnClickListener(new OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+                if (mWebView != null && mWebView.canGoBack())
+                    mWebView.goBack();
+            }
+        });
+
+        mForward.setOnClickListener(new OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+                if (mWebView != null && mWebView.canGoForward())
+                    mWebView.goForward();
+            }
+        });
+
+        mGo.setOnClickListener(new OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+                String url = mUrl.getText().toString();
+                mWebView.loadUrl(url);
+                mWebView.requestFocus();
+            }
+        });
+
+        mMore.setOnClickListener(new OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+                Toast.makeText(MainActivity.this, "not completed",
+                        Toast.LENGTH_LONG).show();
+            }
+        });
+
+        mUrl.setOnFocusChangeListener(new OnFocusChangeListener() {
+
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                if (hasFocus) {
+                    mGo.setVisibility(View.VISIBLE);
+                    if (null == mWebView.getUrl())
+                        return;
+                    if (mWebView.getUrl().equalsIgnoreCase(mHomeUrl)) {
+                        mUrl.setText("");
+                        mGo.setText("首页");
+                        mGo.setTextColor(0X6F0F0F0F);
+                    } else {
+                        mUrl.setText(mWebView.getUrl());
+                        mGo.setText("进入");
+                        mGo.setTextColor(0X6F0000CD);
+                    }
+                } else {
+                    mGo.setVisibility(View.GONE);
+                    String title = mWebView.getTitle();
+                    if (title != null && title.length() > MAX_LENGTH)
+                        mUrl.setText(title.subSequence(0, MAX_LENGTH) + "...");
+                    else
+                        mUrl.setText(title);
+                    InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                    imm.hideSoftInputFromWindow(v.getWindowToken(), 0);
+                }
+            }
+
+        });
+
+        mUrl.addTextChangedListener(new TextWatcher() {
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                // TODO Auto-generated method stub
+
+                String url = null;
+                if (mUrl.getText() != null) {
+                    url = mUrl.getText().toString();
+                }
+
+                if (url == null
+                        || mUrl.getText().toString().equalsIgnoreCase("")) {
+                    mGo.setText("请输入网址");
+                    mGo.setTextColor(0X6F0F0F0F);
+                } else {
+                    mGo.setText("进入");
+                    mGo.setTextColor(0X6F0000CD);
+                }
+            }
+
+            @Override
+            public void beforeTextChanged(CharSequence arg0, int arg1,
+                                          int arg2, int arg3) {
+                // TODO Auto-generated method stub
+
+            }
+
+            @Override
+            public void onTextChanged(CharSequence arg0, int arg1, int arg2,
+                                      int arg3) {
+                // TODO Auto-generated method stub
+
+            }
+        });
+
+        mHome.setOnClickListener(new OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+                if (mWebView != null)
+                    mWebView.loadUrl(mHomeUrl);
+            }
+        });
+
+        mExit.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Process.killProcess(Process.myPid());
+            }
+        });
     }
+
+    private void openWebPage() {
+    	if (mWebView == null)
+    		return;
+
+        String url = "https://va-demo.chinaeast2.cloudapp.chinacloudapi.cn/?avatar=gululu&chatType=voice&bot=c18902dc-7fb8-4c31-9aa4-47f1b616af9e";
+        mUrl.setText(url);
+        mWebView.loadUrl(url);
+        mWebView.requestFocus();
+    }
+
+    boolean[] m_selected = new boolean[]{true, true, true, true, false,
+            false, true};
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        // TODO Auto-generated method stub
-        switch (keyCode) {
-            case KeyEvent.KEYCODE_BACK:
-                this.tbsSuiteExit();
+
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            if (mWebView != null && mWebView.canGoBack()) {
+                mWebView.goBack();
+                if (Integer.parseInt(android.os.Build.VERSION.SDK) >= 16)
+                    changGoForwardButton(mWebView);
+                return true;
+            } else
+                return super.onKeyDown(keyCode, event);
         }
         return super.onKeyDown(keyCode, event);
     }
 
-    private void tbsSuiteExit() {
-        // exit TbsSuite?
-        AlertDialog.Builder dialog = new AlertDialog.Builder(mContext);
-        dialog.setTitle("X5功能演示");
-        dialog.setPositiveButton("OK", new AlertDialog.OnClickListener() {
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        TbsLog.d(TAG, "onActivityResult, requestCode:" + requestCode
+                + ",resultCode:" + resultCode);
 
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                // TODO Auto-generated method stub
-                Process.killProcess(Process.myPid());
+        if (resultCode == RESULT_OK) {
+            switch (requestCode) {
+                case 0:
+                    if (null != uploadFile) {
+                        Uri result = data == null || resultCode != RESULT_OK ? null
+                                : data.getData();
+                        uploadFile.onReceiveValue(result);
+                        uploadFile = null;
+                    }
+                    break;
+                default:
+                    break;
             }
-        });
-        dialog.setMessage("quit now?");
-        dialog.create().show();
+        } else if (resultCode == RESULT_CANCELED) {
+            if (null != uploadFile) {
+                uploadFile.onReceiveValue(null);
+                uploadFile = null;
+            }
+
+        }
+
     }
 
-    private void gotoBrowser() {
-        Intent intent = new Intent(MainActivity.this, BrowserActivity.class);
-        MainActivity.this.startActivity(intent);
+    @Override
+    protected void onNewIntent(Intent intent) {
+        if (intent == null || mWebView == null || intent.getData() == null)
+            return;
+        mWebView.loadUrl(intent.getData().toString());
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (mTestHandler != null)
+            mTestHandler.removeCallbacksAndMessages(null);
+        if (mWebView != null)
+            mWebView.destroy();
+        super.onDestroy();
+    }
+
+    public static final int MSG_OPEN_TEST_URL = 0;
+    public static final int MSG_INIT_UI = 1;
+    private final int mUrlStartNum = 0;
+    private int mCurrentUrl = mUrlStartNum;
+    private Handler mTestHandler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case MSG_OPEN_TEST_URL:
+                    if (!mNeedTestPage) {
+                        return;
+                    }
+
+                    String testUrl = "file:///sdcard/outputHtml/html/"
+                            + Integer.toString(mCurrentUrl) + ".html";
+                    if (mWebView != null) {
+                        mWebView.loadUrl(testUrl);
+                    }
+
+                    mCurrentUrl++;
+                    break;
+                case MSG_INIT_UI:
+                    init();
+                    openWebPage();
+                    break;
+            }
+            super.handleMessage(msg);
+        }
+    };
+
+    private void requestPermissions() {
+        requestPermission(Manifest.permission.INTERNET);
+        requestPermission(Manifest.permission.CAMERA);
+        requestPermission(Manifest.permission.RECORD_AUDIO);
+        requestPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS);
+        requestPermission(Manifest.permission.READ_EXTERNAL_STORAGE);
+        requestPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        System.out.println("<><MainActivity.requestPermissions>+ + + + +");
+    }
+
+    private void requestPermission(String permission) {
+        int hasWriteStoragePermission = ContextCompat.checkSelfPermission(getApplication(), permission);
+        if (hasWriteStoragePermission != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(MainActivity.this, new String[]{permission}, CODE_FOR_WRITE_PERMISSION);
+        }
     }
 }
